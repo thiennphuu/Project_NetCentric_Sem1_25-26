@@ -1,0 +1,12 @@
+[
+  {
+    "id": "one-piece",
+    "title": "One Piece",
+    "author": "Oda Eiichiro",
+    "genres": ["Action", "Adventure", "Shounen"],
+    "status": "ongoing",
+    "total_chapters": 1100,
+    "description": "A young pirate sets out to become the Pirate King.",
+    "cover_url": "https://example.com/covers/one-piece.jpg"
+  }
+]
