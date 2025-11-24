@@ -18,6 +18,7 @@ func ConnectDB() *sql.DB {
 	CREATE TABLE IF NOT EXISTS users (
 		id TEXT PRIMARY KEY,
 		username TEXT UNIQUE NOT NULL,
+		email TEXT UNIQUE,
 		password_hash TEXT NOT NULL,
 		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 	);`
@@ -25,6 +26,10 @@ func ConnectDB() *sql.DB {
 	if err != nil {
 		log.Fatal("Failed to create users table:", err)
 	}
+
+	// Migration: Add email column if it doesn't exist
+	// We ignore the error here because if the column already exists, it will fail, which is fine.
+	db.Exec("ALTER TABLE users ADD COLUMN email TEXT UNIQUE;")
 
 	// Create manga table
 	createMangaTable := `

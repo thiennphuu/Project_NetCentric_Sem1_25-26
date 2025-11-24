@@ -1,19 +1,21 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"database/sql"
+	"flag"
+	"fmt"
 	"log"
 	"net"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
 
-	"github.com/gin-gonic/gin"
-	"google.golang.org/grpc"
 	"mangahub/api"
 	"mangahub/internal/auth"
 	grpcService "mangahub/internal/grpc"
@@ -26,9 +28,118 @@ import (
 	"mangahub/internal/user"
 	"mangahub/internal/websocket"
 	"mangahub/pkg/database"
+	"mangahub/pkg/models"
+
+	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
+	"golang.org/x/crypto/bcrypt"
+	"google.golang.org/grpc"
 )
 
 func main() {
+	if len(os.Args) < 2 {
+		printHelp()
+		return
+	}
+
+	switch os.Args[1] {
+	case "start":
+		if len(os.Args) > 2 && os.Args[2] == "server" {
+			runServer()
+		} else {
+			printHelp()
+		}
+	case "auth":
+		if len(os.Args) > 2 && os.Args[2] == "register" {
+			handleRegister()
+		} else {
+			fmt.Println("Unknown auth command. Available: register")
+		}
+	default:
+		printHelp()
+	}
+}
+
+func printHelp() {
+	fmt.Println("Usage:")
+	fmt.Println("  mangahub start server")
+	fmt.Println("  mangahub auth register --username <name> --email <email>")
+}
+
+func handleRegister() {
+	registerCmd := flag.NewFlagSet("register", flag.ExitOnError)
+	username := registerCmd.String("username", "", "Username")
+	email := registerCmd.String("email", "", "Email")
+
+	if len(os.Args) < 4 {
+		fmt.Println("Usage: mangahub auth register --username <name> --email <email>")
+		return
+	}
+	registerCmd.Parse(os.Args[3:])
+
+	if *username == "" || *email == "" {
+		fmt.Println("Username and email are required")
+		registerCmd.Usage()
+		return
+	}
+
+	fmt.Print("Password: ")
+	reader := bufio.NewReader(os.Stdin)
+	password, _ := reader.ReadString('\n')
+	password = strings.TrimSpace(password)
+
+	fmt.Print("Confirm password: ")
+	confirmPassword, _ := reader.ReadString('\n')
+	confirmPassword = strings.TrimSpace(confirmPassword)
+
+	if password != confirmPassword {
+		fmt.Println("Passwords do not match")
+		return
+	}
+
+	if len(password) < 6 {
+		fmt.Println("Password must be at least 6 characters")
+		return
+	}
+
+	db := database.ConnectDB()
+	defer db.Close()
+
+	repo := &user.UserRepository{DB: db}
+
+	// Check if user exists
+	_, err := repo.GetUserByUsername(*username)
+	if err == nil {
+		fmt.Println("Username already exists")
+		return
+	}
+
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		log.Fatalf("Failed to hash password: %v", err)
+	}
+
+	newUser := models.User{
+		ID:           uuid.New().String(),
+		Username:     *username,
+		Email:        *email,
+		PasswordHash: string(hashedPassword),
+	}
+
+	if err := repo.CreateUser(newUser); err != nil {
+		log.Fatalf("Failed to create user: %v", err)
+	}
+
+	fmt.Println("✓ Account created successfully!")
+	fmt.Printf("User ID: %s\n", newUser.ID)
+	fmt.Printf("Username: %s\n", newUser.Username)
+	fmt.Printf("Email: %s\n", newUser.Email)
+	fmt.Printf("Created: %s\n", time.Now().UTC().Format("2006-01-02 15:04:05 UTC"))
+	fmt.Println("Please login to start using MangaHub:")
+	fmt.Printf(" mangahub auth login --username %s\n", newUser.Username)
+}
+
+func runServer() {
 	// Initialize database
 	db := database.ConnectDB()
 	defer db.Close()
