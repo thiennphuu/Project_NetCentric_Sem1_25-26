@@ -21,3 +21,10 @@ func (r *UserRepository) GetUserByUsername(username string) (models.User, error)
 	err := row.Scan(&user.ID, &user.Username, &user.Email, &user.PasswordHash)
 	return user, err
 }
+
+func (r *UserRepository) GetUserByEmail(email string) (models.User, error) {
+	row := r.DB.QueryRow("SELECT id, username, email, password_hash FROM users WHERE email = ?", email)
+	var user models.User
+	err := row.Scan(&user.ID, &user.Username, &user.Email, &user.PasswordHash)
+	return user, err
+}

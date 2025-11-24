@@ -50,10 +50,17 @@ func main() {
 			printHelp()
 		}
 	case "auth":
-		if len(os.Args) > 2 && os.Args[2] == "register" {
-			handleRegister()
+		if len(os.Args) > 2 {
+			switch os.Args[2] {
+			case "register":
+				handleRegister()
+			case "login":
+				handleLogin()
+			default:
+				fmt.Println("Unknown auth command. Available: register, login")
+			}
 		} else {
-			fmt.Println("Unknown auth command. Available: register")
+			fmt.Println("Missing auth command. Available: register, login")
 		}
 	default:
 		printHelp()
@@ -64,6 +71,7 @@ func printHelp() {
 	fmt.Println("Usage:")
 	fmt.Println("  mangahub start server")
 	fmt.Println("  mangahub auth register --username <name> --email <email>")
+	fmt.Println("  mangahub auth login --username <name> OR --email <email>")
 }
 
 func handleRegister() {
@@ -137,6 +145,73 @@ func handleRegister() {
 	fmt.Printf("Created: %s\n", time.Now().UTC().Format("2006-01-02 15:04:05 UTC"))
 	fmt.Println("Please login to start using MangaHub:")
 	fmt.Printf(" mangahub auth login --username %s\n", newUser.Username)
+}
+
+func handleLogin() {
+	loginCmd := flag.NewFlagSet("login", flag.ExitOnError)
+	username := loginCmd.String("username", "", "Username")
+	email := loginCmd.String("email", "", "Email")
+
+	if len(os.Args) < 4 {
+		fmt.Println("Usage: mangahub auth login --username <name> OR --email <email>")
+		return
+	}
+	loginCmd.Parse(os.Args[3:])
+
+	if *username == "" && *email == "" {
+		fmt.Println("Username or email is required")
+		loginCmd.Usage()
+		return
+	}
+
+	fmt.Print("Password: ")
+	reader := bufio.NewReader(os.Stdin)
+	password, _ := reader.ReadString('\n')
+	password = strings.TrimSpace(password)
+
+	db := database.ConnectDB()
+	defer db.Close()
+
+	repo := &user.UserRepository{DB: db}
+
+	var user models.User
+	var err error
+
+	if *username != "" {
+		user, err = repo.GetUserByUsername(*username)
+	} else {
+		user, err = repo.GetUserByEmail(*email)
+	}
+
+	if err != nil {
+		fmt.Println("Invalid username/email or password")
+		return
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)); err != nil {
+		fmt.Println("Invalid username/email or password")
+		return
+	}
+
+	// Generate token (we don't print it in the new format, but we could if needed)
+	_, err = auth.GenerateToken(user)
+	if err != nil {
+		log.Fatalf("Failed to generate token: %v", err)
+	}
+
+	// Calculate expiry (24 hours from now)
+	expiry := time.Now().Add(24 * time.Hour).UTC().Format("2006-01-02 15:04:05 UTC")
+
+	fmt.Println("✓ Login successful!")
+	fmt.Printf("Welcome back, %s!\n", user.Username)
+	fmt.Println("Session Details:")
+	fmt.Printf(" Token expires: %s (24 hours)\n", expiry)
+	fmt.Println(" Permissions: read, write, sync")
+	fmt.Println("")
+	fmt.Println("Auto-sync: enabled")
+	fmt.Println("Notifications: enabled")
+	fmt.Println("Ready to use MangaHub! Try:")
+	fmt.Println(" mangahub manga search \"your favorite manga\"")
 }
 
 func runServer() {
