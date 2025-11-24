@@ -62,6 +62,17 @@ func main() {
 		} else {
 			fmt.Println("Missing auth command. Available: register, login")
 		}
+	case "manga":
+		if len(os.Args) > 2 {
+			switch os.Args[2] {
+			case "search":
+				handleMangaSearch()
+			default:
+				fmt.Println("Unknown manga command. Available: search")
+			}
+		} else {
+			fmt.Println("Missing manga command. Available: search")
+		}
 	default:
 		printHelp()
 	}
@@ -72,6 +83,42 @@ func printHelp() {
 	fmt.Println("  mangahub start server")
 	fmt.Println("  mangahub auth register --username <name> --email <email>")
 	fmt.Println("  mangahub auth login --username <name> OR --email <email>")
+	fmt.Println("  mangahub manga search \"<query>\"")
+}
+
+func handleMangaSearch() {
+	if len(os.Args) < 4 {
+		fmt.Println("Usage: mangahub manga search \"<query>\"")
+		return
+	}
+
+	query := os.Args[3]
+
+	db := database.ConnectDB()
+	defer db.Close()
+
+	repo := &manga.MangaRepository{DB: db}
+	results, err := repo.SearchManga(query)
+	if err != nil {
+		log.Fatalf("Failed to search manga: %v", err)
+	}
+
+	if len(results) == 0 {
+		fmt.Printf("No manga found matching \"%s\"\n", query)
+		return
+	}
+
+	fmt.Printf("Found %d results for \"%s\":\n", len(results), query)
+	fmt.Println("--------------------------------------------------")
+	for _, m := range results {
+		fmt.Printf("ID: %s\n", m.ID)
+		fmt.Printf("Title: %s\n", m.Title)
+		fmt.Printf("Author: %s\n", m.Author)
+		fmt.Printf("Status: %s\n", m.Status)
+		fmt.Printf("Chapters: %d\n", m.TotalChapters)
+		fmt.Printf("Genres: %v\n", m.Genres)
+		fmt.Println("--------------------------------------------------")
+	}
 }
 
 func handleRegister() {
