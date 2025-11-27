@@ -2,15 +2,19 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"database/sql"
+	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"sync"
 	"syscall"
@@ -73,6 +77,28 @@ func main() {
 		} else {
 			fmt.Println("Missing manga command. Available: search")
 		}
+	case "library":
+		if len(os.Args) > 2 {
+			switch os.Args[2] {
+			case "add":
+				handleLibraryAdd()
+			default:
+				fmt.Println("Unknown library command. Available: add")
+			}
+		} else {
+			fmt.Println("Missing library command. Available: add")
+		}
+	case "progress":
+		if len(os.Args) > 2 {
+			switch os.Args[2] {
+			case "update":
+				handleProgressUpdate()
+			default:
+				fmt.Println("Unknown progress command. Available: update")
+			}
+		} else {
+			fmt.Println("Missing progress command. Available: update")
+		}
 	default:
 		printHelp()
 	}
@@ -84,6 +110,8 @@ func printHelp() {
 	fmt.Println("  mangahub auth register --username <name> --email <email>")
 	fmt.Println("  mangahub auth login --username <name> OR --email <email>")
 	fmt.Println("  mangahub manga search \"<query>\"")
+	fmt.Println("  mangahub library add --manga-id <id> --status <status>")
+	fmt.Println("  mangahub progress update --manga-id <id> --chapter <number>")
 }
 
 func handleMangaSearch() {
@@ -240,10 +268,15 @@ func handleLogin() {
 		return
 	}
 
-	// Generate token (we don't print it in the new format, but we could if needed)
-	_, err = auth.GenerateToken(user)
+	// Generate token and save it
+	token, err := auth.GenerateToken(user)
 	if err != nil {
 		log.Fatalf("Failed to generate token: %v", err)
+	}
+
+	// Save token to file
+	if err := saveToken(token); err != nil {
+		log.Printf("Warning: Failed to save token: %v", err)
 	}
 
 	// Calculate expiry (24 hours from now)
@@ -469,4 +502,206 @@ func loadInitialMangaData(db *sql.DB, mangaRepo *manga.MangaRepository) {
 	}
 
 	log.Printf("Loaded %d manga from JSON file", len(mangaList))
+}
+
+// Token storage functions
+func getTokenFilePath() string {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		// Fallback to current directory
+		return ".mangahub_token"
+	}
+	return filepath.Join(homeDir, ".mangahub_token")
+}
+
+func saveToken(token string) error {
+	tokenFile := getTokenFilePath()
+	return os.WriteFile(tokenFile, []byte(token), 0600)
+}
+
+func loadToken() (string, error) {
+	tokenFile := getTokenFilePath()
+	data, err := os.ReadFile(tokenFile)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(data)), nil
+}
+
+// HTTP client helper for authenticated requests
+func makeAuthenticatedRequest(method, url string, body interface{}) (*http.Response, error) {
+	token, err := loadToken()
+	if err != nil {
+		return nil, fmt.Errorf("not authenticated. Please login first: %v", err)
+	}
+
+	var reqBody io.Reader
+	if body != nil {
+		jsonData, err := json.Marshal(body)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal request body: %v", err)
+		}
+		reqBody = bytes.NewBuffer(jsonData)
+	}
+
+	req, err := http.NewRequest(method, url, reqBody)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %v", err)
+	}
+
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	return client.Do(req)
+}
+
+func handleLibraryAdd() {
+	addCmd := flag.NewFlagSet("add", flag.ExitOnError)
+	mangaID := addCmd.String("manga-id", "", "Manga ID")
+	status := addCmd.String("status", "", "Reading status (reading, plan_to_read, completed, dropped)")
+
+	if len(os.Args) < 4 {
+		fmt.Println("Usage: mangahub library add --manga-id <id> --status <status>")
+		return
+	}
+	addCmd.Parse(os.Args[3:])
+
+	if *mangaID == "" {
+		fmt.Println("Error: --manga-id is required")
+		addCmd.Usage()
+		return
+	}
+
+	if *status == "" {
+		*status = "plan_to_read" // Default status
+	}
+
+	// Validate status
+	validStatuses := []string{"reading", "plan_to_read", "completed", "dropped"}
+	valid := false
+	for _, s := range validStatuses {
+		if *status == s {
+			valid = true
+			break
+		}
+	}
+	if !valid {
+		fmt.Printf("Error: Invalid status '%s'. Valid statuses: %v\n", *status, validStatuses)
+		return
+	}
+
+	// Make API request
+	reqBody := map[string]string{
+		"manga_id": *mangaID,
+		"status":   *status,
+	}
+
+	resp, err := makeAuthenticatedRequest("POST", "http://localhost:8080/api/v1/library", reqBody)
+	if err != nil {
+		fmt.Printf("Error: %v\n", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		fmt.Printf("Error reading response: %v\n", err)
+		return
+	}
+
+	if resp.StatusCode != http.StatusCreated {
+		var errorResp map[string]interface{}
+		if err := json.Unmarshal(body, &errorResp); err == nil {
+			if errMsg, ok := errorResp["error"].(string); ok {
+				fmt.Printf("Error: %s\n", errMsg)
+				return
+			}
+		}
+		fmt.Printf("Error: Failed to add manga to library (Status: %d)\n", resp.StatusCode)
+		fmt.Printf("Response: %s\n", string(body))
+		return
+	}
+
+	var libraryEntry map[string]interface{}
+	if err := json.Unmarshal(body, &libraryEntry); err != nil {
+		fmt.Printf("Error parsing response: %v\n", err)
+		return
+	}
+
+	fmt.Println("✓ Manga added to library successfully!")
+	fmt.Printf("Manga ID: %s\n", *mangaID)
+	fmt.Printf("Status: %s\n", *status)
+	if id, ok := libraryEntry["id"].(string); ok {
+		fmt.Printf("Library Entry ID: %s\n", id)
+	}
+}
+
+func handleProgressUpdate() {
+	updateCmd := flag.NewFlagSet("update", flag.ExitOnError)
+	mangaID := updateCmd.String("manga-id", "", "Manga ID")
+	chapter := updateCmd.Int("chapter", 0, "Chapter number")
+
+	if len(os.Args) < 4 {
+		fmt.Println("Usage: mangahub progress update --manga-id <id> --chapter <number>")
+		return
+	}
+	updateCmd.Parse(os.Args[3:])
+
+	if *mangaID == "" {
+		fmt.Println("Error: --manga-id is required")
+		updateCmd.Usage()
+		return
+	}
+
+	if *chapter <= 0 {
+		fmt.Println("Error: --chapter must be a positive number")
+		updateCmd.Usage()
+		return
+	}
+
+	// Make API request
+	reqBody := map[string]interface{}{
+		"manga_id": *mangaID,
+		"chapter":  *chapter,
+	}
+
+	resp, err := makeAuthenticatedRequest("POST", "http://localhost:8080/api/v1/progress", reqBody)
+	if err != nil {
+		fmt.Printf("Error: %v\n", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		fmt.Printf("Error reading response: %v\n", err)
+		return
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		var errorResp map[string]interface{}
+		if err := json.Unmarshal(body, &errorResp); err == nil {
+			if errMsg, ok := errorResp["error"].(string); ok {
+				fmt.Printf("Error: %s\n", errMsg)
+				return
+			}
+		}
+		fmt.Printf("Error: Failed to update progress (Status: %d)\n", resp.StatusCode)
+		fmt.Printf("Response: %s\n", string(body))
+		return
+	}
+
+	var progressEntry map[string]interface{}
+	if err := json.Unmarshal(body, &progressEntry); err != nil {
+		fmt.Printf("Error parsing response: %v\n", err)
+		return
+	}
+
+	fmt.Println("✓ Reading progress updated successfully!")
+	fmt.Printf("Manga ID: %s\n", *mangaID)
+	fmt.Printf("Chapter: %d\n", *chapter)
+	if id, ok := progressEntry["id"].(string); ok {
+		fmt.Printf("Progress Entry ID: %s\n", id)
+	}
 }
