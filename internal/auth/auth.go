@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
 	"mangahub/pkg/models"
 
 	"github.com/gin-gonic/gin"
@@ -32,6 +33,37 @@ func GenerateToken(user models.User) (string, error) {
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString(JWTSecret)
+}
+
+// ParseToken parses a JWT token string and returns basic user information and expiry time.
+func ParseToken(tokenString string) (userID string, username string, expiry time.Time, err error) {
+	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, errors.New("unexpected signing method")
+		}
+		return JWTSecret, nil
+	})
+	if err != nil || !token.Valid {
+		return "", "", time.Time{}, errors.New("invalid or expired token")
+	}
+
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return "", "", time.Time{}, errors.New("invalid token claims")
+	}
+
+	if uid, ok := claims["user_id"].(string); ok {
+		userID = uid
+	}
+	if un, ok := claims["username"].(string); ok {
+		username = un
+	}
+
+	if exp, ok := claims["exp"].(float64); ok {
+		expiry = time.Unix(int64(exp), 0)
+	}
+
+	return userID, username, expiry, nil
 }
 
 // JWT Middleware for protecting routes

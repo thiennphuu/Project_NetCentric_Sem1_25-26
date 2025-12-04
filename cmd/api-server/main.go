@@ -60,11 +60,17 @@ func main() {
 				handleRegister()
 			case "login":
 				handleLogin()
+			case "logout":
+				handleLogout()
+			case "status":
+				handleAuthStatus()
+			case "change-password":
+				handleChangePassword()
 			default:
-				fmt.Println("Unknown auth command. Available: register, login")
+				fmt.Println("Unknown auth command. Available: register, login, logout, status, change-password")
 			}
 		} else {
-			fmt.Println("Missing auth command. Available: register, login")
+			fmt.Println("Missing auth command. Available: register, login, logout, status, change-password")
 		}
 	case "manga":
 		if len(os.Args) > 2 {
@@ -109,6 +115,9 @@ func printHelp() {
 	fmt.Println("  mangahub start server")
 	fmt.Println("  mangahub auth register --username <name> --email <email>")
 	fmt.Println("  mangahub auth login --username <name> OR --email <email>")
+	fmt.Println("  mangahub auth logout")
+	fmt.Println("  mangahub auth status")
+	fmt.Println("  mangahub auth change-password")
 	fmt.Println("  mangahub manga search \"<query>\"")
 	fmt.Println("  mangahub library add --manga-id <id> --status <status>")
 	fmt.Println("  mangahub progress update --manga-id <id> --chapter <number>")
@@ -292,6 +301,81 @@ func handleLogin() {
 	fmt.Println("Notifications: enabled")
 	fmt.Println("Ready to use MangaHub! Try:")
 	fmt.Println(" mangahub manga search \"your favorite manga\"")
+}
+
+// handleLogout removes the stored authentication token.
+func handleLogout() {
+	// Check if token exists
+	if _, err := loadToken(); err != nil {
+		fmt.Println("✗ Logout failed: Not logged in")
+		fmt.Println("No active session found. You can login with:")
+		fmt.Println("  mangahub auth login --username <username>")
+		return
+	}
+
+	if err := deleteToken(); err != nil {
+		fmt.Printf("✗ Logout failed: %v\n", err)
+		return
+	}
+
+	fmt.Println("✓ Logged out successfully!")
+	fmt.Println("Authentication token removed from local storage.")
+}
+
+// handleAuthStatus checks and prints current authentication status.
+func handleAuthStatus() {
+	token, err := loadToken()
+	if err != nil || strings.TrimSpace(token) == "" {
+		fmt.Println("✗ Not authenticated")
+		fmt.Println("You are not logged in.")
+		fmt.Println("Try: mangahub auth login --username <username>")
+		return
+	}
+
+	userID, username, expiry, err := auth.ParseToken(token)
+	if err != nil {
+		fmt.Printf("✗ Authentication status: %v\n", err)
+		fmt.Println("Stored token is invalid or expired. Please login again:")
+		fmt.Println("  mangahub auth login --username <username>")
+		return
+	}
+
+	// Check expiry
+	if !expiry.IsZero() && time.Now().After(expiry) {
+		fmt.Println("✗ Authentication status: Token expired")
+		fmt.Println("Your session has expired. Please login again:")
+		fmt.Println("  mangahub auth login --username <username>")
+		return
+	}
+
+	// Fetch additional user info from DB if possible
+	db := database.ConnectDB()
+	defer db.Close()
+
+	repo := &user.UserRepository{DB: db}
+	var email string
+	if userID != "" {
+		if u, err := repo.GetUserByID(userID); err == nil {
+			email = u.Email
+		}
+	}
+
+	fmt.Println("✓ You are logged in.")
+	fmt.Println("")
+	fmt.Println("User Information:")
+	fmt.Printf("  User ID: %s\n", userID)
+	fmt.Printf("  Username: %s\n", username)
+	if email != "" {
+		fmt.Printf("  Email: %s\n", email)
+	}
+	fmt.Println("")
+	fmt.Println("Session:")
+	if !expiry.IsZero() {
+		fmt.Printf("  Token expires: %s\n", expiry.UTC().Format("2006-01-02 15:04:05 UTC"))
+	}
+	fmt.Println("  Permissions: read, write, sync")
+	fmt.Println("  Auto-sync: enabled")
+	fmt.Println("  Notifications: enabled")
 }
 
 func runServer() {
@@ -528,6 +612,15 @@ func loadToken() (string, error) {
 	return strings.TrimSpace(string(data)), nil
 }
 
+// deleteToken removes the stored authentication token file.
+func deleteToken() error {
+	tokenFile := getTokenFilePath()
+	if _, err := os.Stat(tokenFile); os.IsNotExist(err) {
+		return err
+	}
+	return os.Remove(tokenFile)
+}
+
 // HTTP client helper for authenticated requests
 func makeAuthenticatedRequest(method, url string, body interface{}) (*http.Response, error) {
 	token, err := loadToken()
@@ -704,4 +797,107 @@ func handleProgressUpdate() {
 	if id, ok := progressEntry["id"].(string); ok {
 		fmt.Printf("Progress Entry ID: %s\n", id)
 	}
+}
+
+// validatePasswordStrength enforces a stronger password policy.
+func validatePasswordStrength(pw string) error {
+	if len(pw) < 8 {
+		return fmt.Errorf("Password must be at least 8 characters with mixed case and numbers")
+	}
+
+	var hasUpper, hasLower, hasDigit bool
+	for _, r := range pw {
+		switch {
+		case r >= 'A' && r <= 'Z':
+			hasUpper = true
+		case r >= 'a' && r <= 'z':
+			hasLower = true
+		case r >= '0' && r <= '9':
+			hasDigit = true
+		}
+	}
+
+	if !hasUpper || !hasLower || !hasDigit {
+		return fmt.Errorf("Password must be at least 8 characters with mixed case and numbers")
+	}
+
+	return nil
+}
+
+// handleChangePassword allows an authenticated user to change their password.
+func handleChangePassword() {
+	// Require existing valid token
+	token, err := loadToken()
+	if err != nil || strings.TrimSpace(token) == "" {
+		fmt.Println("✗ Change password failed: Not authenticated")
+		fmt.Println("Please login before changing password:")
+		fmt.Println("  mangahub auth login --username <username>")
+		return
+	}
+
+	userID, _, _, err := auth.ParseToken(token)
+	if err != nil || userID == "" {
+		fmt.Println("✗ Change password failed: Invalid or expired session")
+		fmt.Println("Please login again:")
+		fmt.Println("  mangahub auth login --username <username>")
+		return
+	}
+
+	reader := bufio.NewReader(os.Stdin)
+
+	fmt.Print("Current password: ")
+	currentPassword, _ := reader.ReadString('\n')
+	currentPassword = strings.TrimSpace(currentPassword)
+
+	fmt.Print("New password: ")
+	newPassword, _ := reader.ReadString('\n')
+	newPassword = strings.TrimSpace(newPassword)
+
+	fmt.Print("Confirm new password: ")
+	confirmPassword, _ := reader.ReadString('\n')
+	confirmPassword = strings.TrimSpace(confirmPassword)
+
+	if newPassword != confirmPassword {
+		fmt.Println("✗ Change password failed: Passwords do not match")
+		fmt.Println("New password and confirmation do not match. Please try again.")
+		return
+	}
+
+	if err := validatePasswordStrength(newPassword); err != nil {
+		fmt.Printf("✗ Change password failed: %s\n", err.Error())
+		return
+	}
+
+	db := database.ConnectDB()
+	defer db.Close()
+
+	repo := &user.UserRepository{DB: db}
+	u, err := repo.GetUserByID(userID)
+	if err != nil {
+		fmt.Println("✗ Change password failed: User not found")
+		return
+	}
+
+	// Verify current password
+	if err := bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(currentPassword)); err != nil {
+		fmt.Println("✗ Change password failed: Invalid current password")
+		fmt.Println("The current password you entered is incorrect.")
+		return
+	}
+
+	// Hash new password and update
+	newHash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
+	if err != nil {
+		fmt.Println("✗ Change password failed: Internal error")
+		return
+	}
+
+	if err := repo.UpdatePassword(userID, string(newHash)); err != nil {
+		fmt.Println("✗ Change password failed: Internal error")
+		return
+	}
+
+	fmt.Println("✓ Password changed successfully!")
+	fmt.Println("Your new password is now active.")
+	fmt.Println("For security, you may need to login again in some clients.")
 }
