@@ -8,5 +8,187 @@
     "total_chapters": 1100,
     "description": "A young pirate sets out to become the Pirate King.",
     "cover_url": "https://example.com/covers/one-piece.jpg"
-  }
+  },
+
+   
+ {
+   "id": "naruto",
+   "title": "Naruto",
+   "author": "Kishimoto Masashi",
+   "genres": ["Action", "Adventure", "Shounen"],
+   "status": "completed",
+   "total_chapters": 700,
+   "description": "A young ninja strives to become Hokage...",
+   "cover_url": "https://example.com/covers/naruto.jpg"
+ },
+ {
+   "id": "bleach",
+   "title": "Bleach",
+   "author": "Kubo Tite",
+   "genres": ["Action", "Supernatural", "Shounen"],
+   "status": "completed",
+   "total_chapters": 686,
+   "description": "A teenager gains the powers of a Soul Reaper...",
+   "cover_url": "https://example.com/covers/bleach.jpg"
+ },
+ {
+   "id": "attack-on-titan",
+   "title": "Attack on Titan",
+   "author": "Isayama Hajime",
+   "genres": ["Action", "Drama", "Dark Fantasy"],
+   "status": "completed",
+   "total_chapters": 139,
+   "description": "Humanity fights for survival against giant Titans...",
+   "cover_url": "https://example.com/covers/attack-on-titan.jpg"
+ },
+ {
+   "id": "death-note",
+   "title": "Death Note",
+   "author": "Ohba Tsugumi & Obata Takeshi",
+   "genres": ["Thriller", "Supernatural", "Shounen"],
+   "status": "completed",
+   "total_chapters": 108,
+   "description": "A student discovers a notebook that kills anyone whose name is written in it...",
+   "cover_url": "https://example.com/covers/death-note.jpg"
+ },
+ {
+   "id": "dragon-ball",
+   "title": "Dragon Ball",
+   "author": "Toriyama Akira",
+   "genres": ["Action", "Adventure", "Martial Arts"],
+   "status": "completed",
+   "total_chapters": 519,
+   "description": "The adventures of Goku as he trains and battles powerful foes...",
+   "cover_url": "https://example.com/covers/dragon-ball.jpg"
+ },
+ {
+   "id": "fullmetal-alchemist",
+   "title": "Fullmetal Alchemist",
+   "author": "Arakawa Hiromu",
+   "genres": ["Action", "Adventure", "Fantasy"],
+   "status": "completed",
+   "total_chapters": 116,
+   "description": "Two brothers search for the Philosopher's Stone after a failed alchemy ritual...",
+   "cover_url": "https://example.com/covers/fullmetal-alchemist.jpg"
+ },
+ {
+   "id": "hunter-x-hunter",
+   "title": "Hunter x Hunter",
+   "author": "Togashi Yoshihiro",
+   "genres": ["Action", "Adventure", "Shounen"],
+   "status": "hiatus",
+   "total_chapters": 400,
+   "description": "A boy sets out to become a Hunter like his father...",
+   "cover_url": "https://example.com/covers/hunter-x-hunter.jpg"
+ },
+ {
+   "id": "my-hero-academia",
+   "title": "My Hero Academia",
+   "author": "Horikoshi Kohei",
+   "genres": ["Action", "Superhero", "Shounen"],
+   "status": "ongoing",
+   "total_chapters": 430,
+   "description": "In a world of heroes, a boy without powers dreams of becoming the greatest...",
+   "cover_url": "https://example.com/covers/my-hero-academia.jpg"
+ },
+ {
+   "id": "demon-slayer",
+   "title": "Demon Slayer: Kimetsu no Yaiba",
+   "author": "Gotouge Koyoharu",
+   "genres": ["Action", "Dark Fantasy", "Shounen"],
+   "status": "completed",
+   "total_chapters": 205,
+   "description": "A boy fights demons to save his sister...",
+   "cover_url": "https://example.com/covers/demon-slayer.jpg"
+ },
+ {
+   "id": "tokyo-ghoul",
+   "title": "Tokyo Ghoul",
+   "author": "Ishida Sui",
+   "genres": ["Horror", "Action", "Seinen"],
+   "status": "completed",
+   "total_chapters": 143,
+   "description": "A college student becomes half-ghoul after a deadly encounter...",
+   "cover_url": "https://example.com/covers/tokyo-ghoul.jpg"
+ },
+ {
+   "id": "black-clover",
+   "title": "Black Clover",
+   "author": "Tabata Yuuki",
+   "genres": ["Action", "Fantasy", "Shounen"],
+   "status": "ongoing",
+   "total_chapters": 370,
+   "description": "A boy without magic aims to become the Wizard King...",
+   "cover_url": "https://example.com/covers/black-clover.jpg"
+ },
+ {
+   "id": "fairy-tail",
+   "title": "Fairy Tail",
+   "author": "Mashima Hiro",
+   "genres": ["Action", "Adventure", "Fantasy"],
+   "status": "completed",
+   "total_chapters": 545,
+   "description": "A guild of wizards embarks on magical adventures...",
+   "cover_url": "https://example.com/covers/fairy-tail.jpg"
+ },
+ {
+   "id": "blue-lock",
+   "title": "Blue Lock",
+   "author": "Kaneshiro Muneyuki & Nomura Yusuke",
+   "genres": ["Sports", "Drama", "Shounen"],
+   "status": "ongoing",
+   "total_chapters": 260,
+   "description": "Japan creates a program to find the ultimate striker...",
+   "cover_url": "https://example.com/covers/blue-lock.jpg"
+ },
+ {
+   "id": "chainsaw-man",
+   "title": "Chainsaw Man",
+   "author": "Fujimoto Tatsuki",
+   "genres": ["Action", "Dark Fantasy", "Shounen"],
+   "status": "ongoing",
+   "total_chapters": 160,
+   "description": "A boy merges with his pet devil to become Chainsaw Man...",
+   "cover_url": "https://example.com/covers/chainsaw-man.jpg"
+ },
+ {
+   "id": "jojos-bizarre-adventure",
+   "title": "JoJo's Bizarre Adventure",
+   "author": "Araki Hirohiko",
+   "genres": ["Action", "Adventure", "Supernatural"],
+   "status": "ongoing",
+   "total_chapters": 950,
+   "description": "Generations of the Joestar family battle supernatural foes...",
+   "cover_url": "https://example.com/covers/jojo.jpg"
+ },
+ {
+   "id": "spy-x-family",
+   "title": "Spy x Family",
+   "author": "Endo Tatsuya",
+   "genres": ["Comedy", "Action", "Shounen"],
+   "status": "ongoing",
+   "total_chapters": 120,
+   "description": "A spy creates a fake family for a mission...",
+   "cover_url": "https://example.com/covers/spy-x-family.jpg"
+ },
+ {
+   "id": "haikyuu",
+   "title": "Haikyuu!!",
+   "author": "Furudate Haruichi",
+   "genres": ["Sports", "Drama", "Shounen"],
+   "status": "completed",
+   "total_chapters": 402,
+   "description": "A short boy dreams of becoming a volleyball ace...",
+   "cover_url": "https://example.com/covers/haikyuu.jpg"
+ },
+ {
+   "id": "slam-dunk",
+   "title": "Slam Dunk",
+   "author": "Inoue Takehiko",
+   "genres": ["Sports", "Comedy", "Shounen"],
+   "status": "completed",
+   "total_chapters": 276,
+   "description": "A delinquent joins his high school basketball team...",
+   "cover_url": "https://example.com/covers/slam-dunk.jpg"
+ }
 ]
