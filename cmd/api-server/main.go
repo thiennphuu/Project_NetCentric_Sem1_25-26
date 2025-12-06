@@ -77,11 +77,15 @@ func main() {
 			switch os.Args[2] {
 			case "search":
 				handleMangaSearch()
+			case "info":
+				handleMangaInfo()
+			case "list":
+				handleMangaList()
 			default:
-				fmt.Println("Unknown manga command. Available: search")
+				fmt.Println("Unknown manga command. Available: search, info, list")
 			}
 		} else {
-			fmt.Println("Missing manga command. Available: search")
+			fmt.Println("Missing manga command. Available: search, info, list")
 		}
 	case "library":
 		if len(os.Args) > 2 {
@@ -118,18 +122,142 @@ func printHelp() {
 	fmt.Println("  mangahub auth logout")
 	fmt.Println("  mangahub auth status")
 	fmt.Println("  mangahub auth change-password")
-	fmt.Println("  mangahub manga search \"<query>\"")
+	fmt.Println("  mangahub manga list [--page <n>] [--limit <n>] [--genre <genre>]")
+	fmt.Println("  mangahub manga search \"<query>\" [--genre <genre>] [--status <status>]")
+	fmt.Println("  mangahub manga info <manga-id>")
 	fmt.Println("  mangahub library add --manga-id <id> --status <status>")
 	fmt.Println("  mangahub progress update --manga-id <id> --chapter <number>")
 }
 
-func handleMangaSearch() {
+func handleMangaInfo() {
 	if len(os.Args) < 4 {
-		fmt.Println("Usage: mangahub manga search \"<query>\"")
+		fmt.Println("Usage: mangahub manga info <manga-id>")
+		return
+	}
+
+	mangaID := os.Args[3]
+
+	db := database.ConnectDB()
+	defer db.Close()
+
+	repo := &manga.MangaRepository{DB: db}
+	m, err := repo.GetMangaByID(mangaID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			fmt.Printf("Manga with ID \"%s\" not found.\n", mangaID)
+		} else {
+			log.Fatalf("Failed to get manga info: %v", err)
+		}
+		return
+	}
+
+	fmt.Println("--------------------------------------------------")
+	fmt.Printf("Title:    %s\n", m.Title)
+	fmt.Printf("ID:       %s\n", m.ID)
+	fmt.Printf("Author:   %s\n", m.Author)
+	fmt.Printf("Status:   %s\n", m.Status)
+	fmt.Printf("Chapters: %d\n", m.TotalChapters)
+	fmt.Printf("Genres:   %v\n", m.Genres)
+	if m.Description != "" {
+		fmt.Printf("Summary:  %s\n", m.Description)
+	}
+	fmt.Println("--------------------------------------------------")
+}
+
+func handleMangaList() {
+	listCmd := flag.NewFlagSet("list", flag.ExitOnError)
+	page := listCmd.Int("page", 1, "Page number")
+	limit := listCmd.Int("limit", 10, "Items per page")
+	genre := listCmd.String("genre", "", "Filter by genre")
+
+	if len(os.Args) > 3 {
+		listCmd.Parse(os.Args[3:])
+	}
+
+	if *page < 1 {
+		*page = 1
+	}
+	if *limit < 1 {
+		*limit = 10
+	}
+
+	db := database.ConnectDB()
+	defer db.Close()
+
+	repo := &manga.MangaRepository{DB: db}
+	mangas, err := repo.GetAllManga()
+	if err != nil {
+		log.Fatalf("Failed to list manga: %v", err)
+	}
+
+	// Filter
+	var filtered []models.Manga
+	if *genre != "" {
+		for _, m := range mangas {
+			found := false
+			for _, g := range m.Genres {
+				if strings.EqualFold(g, *genre) {
+					found = true
+					break
+				}
+			}
+			if found {
+				filtered = append(filtered, m)
+			}
+		}
+	} else {
+		filtered = mangas
+	}
+
+	// Paginate
+	total := len(filtered)
+	totalPages := (total + *limit - 1) / *limit
+	if totalPages == 0 {
+		totalPages = 1
+	}
+
+	start := (*page - 1) * *limit
+	end := start + *limit
+	if start >= total {
+		if total == 0 {
+			fmt.Println("No manga found.")
+		} else {
+			fmt.Printf("No manga found on page %d (Total pages: %d).\n", *page, totalPages)
+		}
+		return
+	}
+	if end > total {
+		end = total
+	}
+
+	fmt.Printf("Listing manga (Page %d/%d, Total: %d):\n", *page, totalPages, total)
+	fmt.Println("--------------------------------------------------")
+	for _, m := range filtered[start:end] {
+		fmt.Printf("ID: %s\n", m.ID)
+		fmt.Printf("Title: %s\n", m.Title)
+		fmt.Printf("Author: %s\n", m.Author)
+		fmt.Printf("Status: %s\n", m.Status)
+		fmt.Printf("Genres: %v\n", m.Genres)
+		fmt.Println("--------------------------------------------------")
+	}
+}
+
+func handleMangaSearch() {
+	// Basic usage message with optional filters
+	if len(os.Args) < 4 {
+		fmt.Println("Usage: mangahub manga search \"<query>\" [--genre <genre>] [--status <status>]")
 		return
 	}
 
 	query := os.Args[3]
+
+	// Parse optional flags for filtering
+	searchCmd := flag.NewFlagSet("search", flag.ExitOnError)
+	genre := searchCmd.String("genre", "", "Filter by genre")
+	status := searchCmd.String("status", "", "Filter by status")
+	if len(os.Args) > 4 {
+		searchCmd.Parse(os.Args[4:])
+	}
 
 	db := database.ConnectDB()
 	defer db.Close()
@@ -140,14 +268,35 @@ func handleMangaSearch() {
 		log.Fatalf("Failed to search manga: %v", err)
 	}
 
-	if len(results) == 0 {
-		fmt.Printf("No manga found matching \"%s\"\n", query)
+	// Apply filters if provided
+	filtered := []models.Manga{}
+	for _, m := range results {
+		if *genre != "" {
+			found := false
+			for _, g := range m.Genres {
+				if strings.EqualFold(g, *genre) {
+					found = true
+					break
+				}
+			}
+			if !found {
+				continue
+			}
+		}
+		if *status != "" && !strings.EqualFold(m.Status, *status) {
+			continue
+		}
+		filtered = append(filtered, m)
+	}
+
+	if len(filtered) == 0 {
+		fmt.Printf("No manga found matching \"%s\" with the given filters.\n", query)
 		return
 	}
 
-	fmt.Printf("Found %d results for \"%s\":\n", len(results), query)
+	fmt.Printf("Found %d results for \"%s\":\n", len(filtered), query)
 	fmt.Println("--------------------------------------------------")
-	for _, m := range results {
+	for _, m := range filtered {
 		fmt.Printf("ID: %s\n", m.ID)
 		fmt.Printf("Title: %s\n", m.Title)
 		fmt.Printf("Author: %s\n", m.Author)
