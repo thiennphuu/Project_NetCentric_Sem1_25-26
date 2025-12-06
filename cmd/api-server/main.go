@@ -801,10 +801,11 @@ func makeAuthenticatedRequest(method, url string, body interface{}) (*http.Respo
 func handleLibraryAdd() {
 	addCmd := flag.NewFlagSet("add", flag.ExitOnError)
 	mangaID := addCmd.String("manga-id", "", "Manga ID")
-	status := addCmd.String("status", "", "Reading status (reading, plan_to_read, completed, dropped)")
+	status := addCmd.String("status", "", "Reading status (reading, plan_to_read, completed, on_hold, dropped)")
+	rating := addCmd.Int("rating", 0, "Rating (0-10)")
 
 	if len(os.Args) < 4 {
-		fmt.Println("Usage: mangahub library add --manga-id <id> --status <status>")
+		fmt.Println("Usage: mangahub library add --manga-id <id> --status <status> [--rating <0-10>]")
 		return
 	}
 	addCmd.Parse(os.Args[3:])
@@ -820,7 +821,7 @@ func handleLibraryAdd() {
 	}
 
 	// Validate status
-	validStatuses := []string{"reading", "plan_to_read", "completed", "dropped"}
+	validStatuses := []string{"reading", "plan_to_read", "completed", "on_hold", "dropped"}
 	valid := false
 	for _, s := range validStatuses {
 		if *status == s {
@@ -833,10 +834,19 @@ func handleLibraryAdd() {
 		return
 	}
 
+	// Validate rating
+	if *rating < 0 || *rating > 10 {
+		fmt.Println("Error: Rating must be between 0 and 10")
+		return
+	}
+
 	// Make API request
-	reqBody := map[string]string{
+	reqBody := map[string]interface{}{
 		"manga_id": *mangaID,
 		"status":   *status,
+	}
+	if *rating > 0 {
+		reqBody["rating"] = *rating
 	}
 
 	resp, err := makeAuthenticatedRequest("POST", "http://localhost:8080/api/v1/library", reqBody)
@@ -874,6 +884,9 @@ func handleLibraryAdd() {
 	fmt.Println("✓ Manga added to library successfully!")
 	fmt.Printf("Manga ID: %s\n", *mangaID)
 	fmt.Printf("Status: %s\n", *status)
+	if *rating > 0 {
+		fmt.Printf("Rating: %d\n", *rating)
+	}
 	if id, ok := libraryEntry["id"].(string); ok {
 		fmt.Printf("Library Entry ID: %s\n", id)
 	}
